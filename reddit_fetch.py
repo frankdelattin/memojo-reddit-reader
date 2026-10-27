@@ -69,10 +69,21 @@ def get(path, tok, ua, params=None):
     return data
 
 
-def match(text):
+PHOTO_WORDS = ["photo", "picture", "pic ", "pics", "camera roll", "gallery", "album", "icloud photos",
+               "google photos", "screenshot", "memories", "image"]
+
+
+PHOTO_SUBS = {"googlephotos", "applephotos", "photos"}
+
+
+def match(text, sub=""):
+    """A post matches when it sounds like one of our audiences AND is about
+    photos (implied in the photo subreddits); the second half keeps
+    clothes-decluttering and comics readers out."""
     t = text.lower()
-    hits = [k for k, phrases in VOCAB.items() if any(p in t for p in phrases)]
-    return hits
+    if sub.lower() not in PHOTO_SUBS and not any(w in t for w in PHOTO_WORDS):
+        return []
+    return [k for k, phrases in VOCAB.items() if any(p in t for p in phrases)]
 
 
 def lead(post, matched):
@@ -150,7 +161,7 @@ def run_rss(subs, since, out, check):
             d = post["data"]
             if d["created_utc"] < since:
                 continue
-            m = match(d["title"] + " " + d["selftext"])
+            m = match(d["title"] + " " + d["selftext"], sub)
             if m:
                 out["leads"].append(lead(post, m))
         if check:
@@ -204,7 +215,7 @@ def main():
             d = post["data"]
             if d.get("created_utc", 0) < since or d.get("id") in seen:
                 continue
-            m = match((d.get("title") or "") + " " + (d.get("selftext") or ""))
+            m = match((d.get("title") or "") + " " + (d.get("selftext") or ""), sub)
             if m:
                 seen.add(d["id"])
                 out["leads"].append(lead(post, m))
