@@ -29,17 +29,25 @@ RSS_UA = "Memojo Community feed reader/0.1 (+https://memojo.eu; contact via http
 ATOM = "{http://www.w3.org/2005/Atom}"
 
 SUBS = ["googlephotos", "ApplePhotos", "degoogle", "declutter", "digitalminimalism",
-        "androidapps", "GooglePixel", "samsung", "iphone", "privacy", "photos", "ios"]
+        "androidapps", "GooglePixel", "samsung", "iphone", "privacy", "photos", "ios",
+        "android", "apple", "applehelp", "iphonehelp", "AndroidQuestions", "techsupport",
+        "iCloud", "organization", "GalaxyS25Ultra", "Smartphones"]
 # What a fitting post sounds like. A post matches when any phrase appears in
 # its title or text. Kept short on purpose: the run judges fit afterwards.
 VOCAB = {
-    "cant_find": ["can't find", "cant find", "cannot find", "search doesn't", "search does not",
-                  "search is useless", "search sucks", "search not working", "find a photo", "find photos",
-                  "scrolling for", "scroll through", "lost photo"],
+    "cant_find": ["can't find", "cant find", "cannot find", "can't locate", "search doesn't", "search does not",
+                  "search is useless", "search sucks", "search not working", "search isn't working", "find a photo",
+                  "find photos", "find the photo", "find my photos", "scrolling for", "scroll through", "lost photo",
+                  "lost my photos", "photos disappeared", "photos are gone", "where are my photos", "missing photos",
+                  "photos missing", "find an old photo", "find a picture", "find pictures"],
     "overwhelmed": ["too many photos", "so many photos", "thousands of photos", "000 photos", "k photos",
-                    "camera roll is a mess", "organize my photos", "organise my photos", "organizing photos",
-                    "organising photos", "screenshots everywhere", "where do i start", "overwhelm",
-                    "declutter photos", "clean up my photos", "years of photos"],
+                    "camera roll is a mess", "camera roll mess", "organize my photos", "organise my photos",
+                    "organizing photos", "organising photos", "organize photos", "organise photos",
+                    "organize my pictures", "sort my photos", "sort through", "photo organization",
+                    "photo organisation", "best way to organize", "how do you organize", "how do you organise",
+                    "screenshots everywhere", "where do i start", "overwhelm", "declutter photos",
+                    "clean up my photos", "cleaning up photos", "years of photos", "duplicate photos",
+                    "duplicates", "photo mess", "backlog of photos"],
     "control": ["alternative to google photos", "google photos alternative", "alternative to icloud",
                 "leave google photos", "leaving google photos", "without cloud", "no cloud", "offline gallery",
                 "local gallery", "on device", "on-device", "don't want to upload", "privacy photos app",
