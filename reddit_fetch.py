@@ -99,6 +99,8 @@ def lead(post, matched):
     text = (d.get("selftext") or "").replace("\n", " ").strip()
     quote = text[:200] if text else (d.get("title") or "")[:200]
     return {
+        # The run judges on `text` (up to 1500 chars); only `quote` is kept on a card.
+        "text": text[:1500],
         "url": "https://www.reddit.com" + d.get("permalink", ""),
         "subreddit": "r/" + d.get("subreddit", ""),
         "posted": datetime.fromtimestamp(d.get("created_utc", 0), timezone.utc).strftime("%Y-%m-%d"),
