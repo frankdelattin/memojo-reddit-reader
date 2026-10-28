@@ -138,16 +138,16 @@ def rss_posts(sub, query=None):
     else:
         url = f"https://www.reddit.com/r/{sub}/new.rss?limit=100"
     req = urllib.request.Request(url, headers={"User-Agent": RSS_UA})
-    for attempt in range(4):
+    for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 root = ET.fromstring(r.read())
             break
         except urllib.error.HTTPError as e:
-            if e.code != 429 or attempt == 3:
+            if e.code != 429 or attempt == 2:
                 raise
             wait = e.headers.get("Retry-After")
-            time.sleep(int(wait) if wait and wait.isdigit() else 61)
+            time.sleep(min(int(wait) if wait and wait.isdigit() else 61, 90))
     time.sleep(12.0)
     posts = []
     for e in root.findall(ATOM + "entry"):
@@ -171,8 +171,17 @@ def rss_posts(sub, query=None):
     return posts
 
 
-def run_rss(subs, since, out, check, searches=False, since_search=None):
+def write_out(out, path):
+    """Partial results after every subreddit, so a run on a deadline can use
+    what is there; `complete` says whether the reader finished."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, indent=1)
+
+
+def run_rss(subs, since, out, check, searches=False, since_search=None, out_path=None, deadline=None):
     seen = set()
+    out["complete"] = False
+    out["subreddits_done"] = 0
 
     def take(posts, sub, floor):
         for post in posts:
@@ -184,7 +193,11 @@ def run_rss(subs, since, out, check, searches=False, since_search=None):
                 seen.add(d["id"])
                 out["leads"].append(lead(post, m))
 
+    out["mode"] = "rss+search" if searches else "rss"
     for sub in subs:
+        if deadline and time.time() > deadline:
+            out.setdefault("gaps", []).append(f"time budget reached before r/{sub}; {len(subs) - out['subreddits_done']} subreddits not read")
+            break
         out["subreddits"]["r/" + sub] = [{"name": "not read", "text": "rules are not in the feed; read them by hand before a Memojo mention"}]
         try:
             take(rss_posts(sub), sub, since)
@@ -192,13 +205,20 @@ def run_rss(subs, since, out, check, searches=False, since_search=None):
             out.setdefault("gaps", []).append(f"r/{sub} rss: {e}")
         if searches:
             for q in SEARCH_QUERIES:
+                if deadline and time.time() > deadline:
+                    break
                 try:
                     take(rss_posts(sub, q), sub, since_search or since)
                 except Exception as e:
                     out.setdefault("gaps", []).append(f"r/{sub} search {q!r}: {e}")
+        out["subreddits_done"] += 1
+        if out_path:
+            out["leads"].sort(key=lambda l: l["posted"], reverse=True)
+            write_out(out, out_path)
         if check:
             break
-    out["mode"] = "rss+search" if searches else "rss"
+    else:
+        out["complete"] = True
 
 
 def main():
@@ -215,7 +235,9 @@ def main():
     ap.add_argument("--search-days", type=int, default=30, help="how far back a search result may be")
     ap.add_argument("--shard", choices=["a", "b", "all"], default="all",
                     help="a = first half of the subreddits, b = second half; spreads the searches over two runs")
+    ap.add_argument("--max-minutes", type=float, default=0, help="stop reading after this many minutes and write what is there")
     a = ap.parse_args()
+    deadline = time.time() + a.max_minutes * 60 if a.max_minutes else None
     since = time.time() - a.days * 86400
     out = {"run": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
            "fetched_at": datetime.now(timezone.utc).isoformat(), "subreddits": {}, "leads": []}
@@ -225,12 +247,11 @@ def main():
     elif a.shard == "b":
         subs = subs[(len(subs) + 1) // 2:]
     if a.rss or not (a.client_id and a.secret):
-        run_rss(subs, since, out, a.check, a.searches, time.time() - a.search_days * 86400)
+        run_rss(subs, since, out, a.check, a.searches, time.time() - a.search_days * 86400, a.out, deadline)
         out["leads"].sort(key=lambda l: l["posted"], reverse=True)
-        with open(a.out, "w", encoding="utf-8") as f:
-            json.dump(out, f, ensure_ascii=False, indent=1)
-        print(f"reddit_fetch (rss): {len(out['leads'])} matching posts from {1 if a.check else len(subs)} subreddits, "
-              f"{len(out.get('gaps', []))} gaps, written to {a.out}")
+        write_out(out, a.out)
+        print(f"reddit_fetch ({out['mode']}): {len(out['leads'])} matching posts from {out['subreddits_done']} of {len(subs)} subreddits, "
+              f"{len(out.get('gaps', []))} gaps, complete={out['complete']}, written to {a.out}")
         return
     ua = UA_FMT.format(user=a.user)
     tok = token(a.client_id, a.secret, ua)
