@@ -31,7 +31,15 @@ ATOM = "{http://www.w3.org/2005/Atom}"
 SUBS = ["googlephotos", "ApplePhotos", "degoogle", "declutter", "digitalminimalism",
         "androidapps", "GooglePixel", "samsung", "iphone", "privacy", "photos", "ios",
         "android", "apple", "applehelp", "iphonehelp", "AndroidQuestions", "techsupport",
-        "iCloud", "organization", "GalaxyS25Ultra", "Smartphones"]
+        "iCloud", "organization", "GalaxyS25Ultra", "Smartphones",
+        "GalaxyS24Ultra", "GalaxyS23", "oneplus", "Xiaomi", "NothingTech", "fairphone",
+        "PrivacyGuides", "privacytoolsIO", "fossdroid", "MacOS", "iPhoneography", "Parenting",
+        "Mommit", "Genealogy", "simpleliving", "minimalism", "productivity", "ProductivityApps",
+        "computerhelp", "onedrive", "dropbox", "Pixel10", "iphone17"]
+# Searches run inside each subreddit (r/<sub>/search.rss, last month). Reddit's
+# global search feed is rate limited; the per-subreddit one answers.
+SEARCH_QUERIES = ["can't find photo", "too many photos", "organize photos", "lost photos",
+                  "photos app alternative", "duplicate photos"]
 # What a fitting post sounds like. A post matches when any phrase appears in
 # its title or text. Kept short on purpose: the run judges fit afterwards.
 VOCAB = {
@@ -120,11 +128,15 @@ def strip_html(s):
     return re.sub(r"\s+", " ", html.unescape(s)).strip()
 
 
-def rss_posts(sub):
-    """One feed. Reddit meters unauthenticated readers per address and
+def rss_posts(sub, query=None):
+    """One feed: the subreddit's newest posts, or a search inside it over the
+    last month. Reddit meters unauthenticated readers per address and
     answers 429 with a Retry-After; we wait what it says (61 s when it says
     nothing), three times, then give up on that feed for today."""
-    url = f"https://www.reddit.com/r/{sub}/new.rss?limit=100"
+    if query:
+        url = f"https://www.reddit.com/r/{sub}/search.rss?q={urllib.parse.quote(query)}&restrict_sr=1&sort=new&t=month"
+    else:
+        url = f"https://www.reddit.com/r/{sub}/new.rss?limit=100"
     req = urllib.request.Request(url, headers={"User-Agent": RSS_UA})
     for attempt in range(4):
         try:
@@ -159,24 +171,34 @@ def rss_posts(sub):
     return posts
 
 
-def run_rss(subs, since, out, check):
-    for sub in subs:
-        out["subreddits"]["r/" + sub] = [{"name": "not read", "text": "rules are not in the feed; read them by hand before a Memojo mention"}]
-        try:
-            posts = rss_posts(sub)
-        except Exception as e:
-            out.setdefault("gaps", []).append(f"r/{sub} rss: {e}")
-            continue
+def run_rss(subs, since, out, check, searches=False, since_search=None):
+    seen = set()
+
+    def take(posts, sub, floor):
         for post in posts:
             d = post["data"]
-            if d["created_utc"] < since:
+            if d["created_utc"] < floor or d["id"] in seen:
                 continue
             m = match(d["title"] + " " + d["selftext"], sub)
             if m:
+                seen.add(d["id"])
                 out["leads"].append(lead(post, m))
+
+    for sub in subs:
+        out["subreddits"]["r/" + sub] = [{"name": "not read", "text": "rules are not in the feed; read them by hand before a Memojo mention"}]
+        try:
+            take(rss_posts(sub), sub, since)
+        except Exception as e:
+            out.setdefault("gaps", []).append(f"r/{sub} rss: {e}")
+        if searches:
+            for q in SEARCH_QUERIES:
+                try:
+                    take(rss_posts(sub, q), sub, since_search or since)
+                except Exception as e:
+                    out.setdefault("gaps", []).append(f"r/{sub} search {q!r}: {e}")
         if check:
             break
-    out["mode"] = "rss"
+    out["mode"] = "rss+search" if searches else "rss"
 
 
 def main():
@@ -189,13 +211,21 @@ def main():
     ap.add_argument("--out", default="reddit_leads.json")
     ap.add_argument("--check", action="store_true", help="only one subreddit, to prove access")
     ap.add_argument("--rss", action="store_true", help="read the public feeds even if credentials exist")
+    ap.add_argument("--searches", action="store_true", help="also search inside each subreddit (last month)")
+    ap.add_argument("--search-days", type=int, default=30, help="how far back a search result may be")
+    ap.add_argument("--shard", choices=["a", "b", "all"], default="all",
+                    help="a = first half of the subreddits, b = second half; spreads the searches over two runs")
     a = ap.parse_args()
     since = time.time() - a.days * 86400
     out = {"run": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
            "fetched_at": datetime.now(timezone.utc).isoformat(), "subreddits": {}, "leads": []}
     subs = [s for s in a.subs.split(",") if s]
+    if a.shard == "a":
+        subs = subs[: (len(subs) + 1) // 2]
+    elif a.shard == "b":
+        subs = subs[(len(subs) + 1) // 2:]
     if a.rss or not (a.client_id and a.secret):
-        run_rss(subs, since, out, a.check)
+        run_rss(subs, since, out, a.check, a.searches, time.time() - a.search_days * 86400)
         out["leads"].sort(key=lambda l: l["posted"], reverse=True)
         with open(a.out, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False, indent=1)
