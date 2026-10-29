@@ -38,8 +38,7 @@ SUBS = ["googlephotos", "ApplePhotos", "degoogle", "declutter", "digitalminimali
         "computerhelp", "onedrive", "dropbox", "Pixel10", "iphone17"]
 # Searches run inside each subreddit (r/<sub>/search.rss, last month). Reddit's
 # global search feed is rate limited; the per-subreddit one answers.
-SEARCH_QUERIES = ["can't find photo", "too many photos", "organize photos", "lost photos",
-                  "photos app alternative", "duplicate photos"]
+SEARCH_QUERIES = ["can't find photo", "too many photos", "organize photos", "photos app alternative"]
 # What a fitting post sounds like. A post matches when any phrase appears in
 # its title or text. Kept short on purpose: the run judges fit afterwards.
 VOCAB = {
