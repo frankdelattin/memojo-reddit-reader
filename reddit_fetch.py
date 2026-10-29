@@ -204,13 +204,21 @@ def run_rss(subs, since, out, check, searches=False, since_search=None, out_path
         except Exception as e:
             out.setdefault("gaps", []).append(f"r/{sub} rss: {e}")
         if searches:
+            limited = 0
             for q in SEARCH_QUERIES:
                 if deadline and time.time() > deadline:
                     break
                 try:
                     take(rss_posts(sub, q), sub, since_search or since)
+                    limited = 0
                 except Exception as e:
                     out.setdefault("gaps", []).append(f"r/{sub} search {q!r}: {e}")
+                    if "429" in str(e):
+                        limited += 1
+                        if limited >= 2:  # Reddit is throttling this address: move on, the next run gets this subreddit again
+                            out["gaps"].append(f"r/{sub}: searches skipped after two 429s")
+                            time.sleep(30)
+                            break
         out["subreddits_done"] += 1
         if out_path:
             out["leads"].sort(key=lambda l: l["posted"], reverse=True)
@@ -233,8 +241,8 @@ def main():
     ap.add_argument("--rss", action="store_true", help="read the public feeds even if credentials exist")
     ap.add_argument("--searches", action="store_true", help="also search inside each subreddit (last month)")
     ap.add_argument("--search-days", type=int, default=30, help="how far back a search result may be")
-    ap.add_argument("--shard", choices=["a", "b", "all"], default="all",
-                    help="a = first half of the subreddits, b = second half; spreads the searches over two runs")
+    ap.add_argument("--shard", choices=["a", "b", "c", "d", "all"], default="all",
+                    help="a to d = one quarter of the subreddits each; spreads the searches over four runs")
     ap.add_argument("--max-minutes", type=float, default=0, help="stop reading after this many minutes and write what is there")
     a = ap.parse_args()
     deadline = time.time() + a.max_minutes * 60 if a.max_minutes else None
@@ -242,10 +250,10 @@ def main():
     out = {"run": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
            "fetched_at": datetime.now(timezone.utc).isoformat(), "subreddits": {}, "leads": []}
     subs = [s for s in a.subs.split(",") if s]
-    if a.shard == "a":
-        subs = subs[: (len(subs) + 1) // 2]
-    elif a.shard == "b":
-        subs = subs[(len(subs) + 1) // 2:]
+    if a.shard != "all":
+        q = (len(subs) + 3) // 4
+        i = "abcd".index(a.shard)
+        subs = subs[i * q:(i + 1) * q]
     if a.rss or not (a.client_id and a.secret):
         run_rss(subs, since, out, a.check, a.searches, time.time() - a.search_days * 86400, a.out, deadline)
         out["leads"].sort(key=lambda l: l["posted"], reverse=True)
